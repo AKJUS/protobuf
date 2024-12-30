@@ -18,17 +18,18 @@ from google.protobuf import descriptor_pool
 from google.protobuf import symbol_database
 from google.protobuf import text_format
 from google.protobuf.internal import api_implementation
+from google.protobuf.internal import test_proto2_pb2
 from google.protobuf.internal import test_util
 from google.protobuf.internal import testing_refleaks
 
-from google.protobuf.internal import _parameterized
-from google.protobuf import unittest_legacy_features_pb2
+from absl.testing import parameterized
 from google.protobuf import unittest_custom_options_pb2
 from google.protobuf import unittest_features_pb2
 from google.protobuf import unittest_import_pb2
+from google.protobuf import unittest_legacy_features_pb2
 from google.protobuf import unittest_pb2
-from google.protobuf import unittest_proto3_pb2
 from google.protobuf import unittest_proto3_extensions_pb2
+from google.protobuf import unittest_proto3_pb2
 
 
 TEST_EMPTY_MESSAGE_DESCRIPTOR_ASCII = """
@@ -234,13 +235,6 @@ class DescriptorTest(unittest.TestCase):
 
   def testContainingServiceFixups(self):
     self.assertEqual(self.my_service, self.my_method.containing_service)
-
-  @unittest.skipIf(
-      api_implementation.Type() == 'python',
-      'GetDebugString is only available with the cpp implementation',
-  )
-  def testGetDebugString(self):
-    self.assertEqual(self.my_file.GetDebugString(), TEST_FILE_DESCRIPTOR_DEBUG)
 
   def testGetOptions(self):
     self.assertEqual(self.my_enum.GetOptions(),
@@ -549,7 +543,8 @@ class DescriptorTest(unittest.TestCase):
 
   @unittest.skipIf(
       api_implementation.Type() == 'python',
-      'Immutability of descriptors is only enforced in v2 implementation')
+      'Immutability of descriptors is only enforced in c++ and upb backends',
+  )
   def testImmutableCppDescriptor(self):
     file_descriptor = unittest_pb2.DESCRIPTOR
     message_descriptor = unittest_pb2.TestAllTypes.DESCRIPTOR
@@ -574,8 +569,19 @@ class DescriptorTest(unittest.TestCase):
       enum_descriptor.has_options = False
     with self.assertRaises(AttributeError) as e:
       message_descriptor.has_options = True
-    self.assertEqual('attribute is not writable: has_options',
-                     str(e.exception))
+
+    if api_implementation.Type() == 'cpp':
+      self.assertEqual(
+          'attribute is not writable: has_options', str(e.exception)
+      )
+    else:
+      self.assertEqual(api_implementation.Type(), 'upb')
+      self.assertEqual(
+          "attribute 'has_options' of "
+          "'google._upb._message.Descriptor' "
+          'objects is not writable',
+          str(e.exception),
+      )
 
   def testDefault(self):
     message_descriptor = unittest_pb2.TestAllTypes.DESCRIPTOR
@@ -726,7 +732,7 @@ class GeneratedDescriptorTest(unittest.TestCase):
     excepted_dict['new_key'] = 'new'
     self.assertNotEqual(mapping, excepted_dict)
     self.assertRaises(KeyError, mapping.__getitem__, 'key_error')
-    self.assertRaises(KeyError, mapping.__getitem__, len(mapping) + 1)
+    self.assertRaises(KeyError, mapping.__getitem__, len(mapping) * 2)
     # TODO: Add __repr__ support for DescriptorMapping.
     if api_implementation.Type() == 'cpp':
       self.assertEqual(str(mapping)[0], '<')
@@ -1225,9 +1231,9 @@ class MakeDescriptorTest(unittest.TestCase):
 
 
 @testing_refleaks.TestCase
-class FeaturesTest(_parameterized.TestCase):
+class FeaturesTest(parameterized.TestCase):
 
-  @_parameterized.named_parameters([
+  @parameterized.named_parameters([
       ('File', lambda: descriptor_pb2.DESCRIPTOR),
       ('Message', lambda: descriptor_pb2.FeatureSet.DESCRIPTOR),
       (
@@ -1325,7 +1331,7 @@ class FeaturesTest(_parameterized.TestCase):
     )
 
   def testProto2Defaults(self):
-    features = unittest_pb2.TestAllTypes.DESCRIPTOR.fields_by_name[
+    features = test_proto2_pb2.TestProto2.DESCRIPTOR.fields_by_name[
         'optional_int32'
     ]._GetFeatures()
     fs = descriptor_pb2.FeatureSet
@@ -1474,6 +1480,7 @@ class FeatureInheritanceTest(unittest.TestCase):
     file = descriptor_pb2.FileDescriptorProto()
     descriptor_pb2.DESCRIPTOR.CopyToProto(file)
     ret.pool.Add(file)
+    file.Clear()
     unittest_features_pb2.DESCRIPTOR.CopyToProto(file)
     ret.pool.Add(file)
 

@@ -12,8 +12,10 @@
 #include "python/extension_dict.h"
 #include "python/map.h"
 #include "python/repeated.h"
+#include "upb/base/string_view.h"
 #include "upb/message/compare.h"
 #include "upb/message/copy.h"
+#include "upb/message/message.h"
 #include "upb/reflection/def.h"
 #include "upb/reflection/message.h"
 #include "upb/text/encode.h"
@@ -177,8 +179,10 @@ err:
 // The parent may also be non-present, in which case a mutation will trigger a
 // chain reaction.
 typedef struct PyUpb_Message {
-  PyObject_HEAD;
+  // clang-format off
+  PyObject_HEAD
   PyObject* arena;
+  // clang-format on
   uintptr_t def;  // Tagged, low bit 1 == upb_FieldDef*, else upb_MessageDef*
   union {
     // when def is msgdef, the data for this msg.
@@ -575,9 +579,7 @@ static bool PyUpb_Message_IsEmpty(const upb_Message* msg,
   upb_MessageValue val;
   if (upb_Message_Next(msg, m, ext_pool, &f, &val, &iter)) return false;
 
-  size_t len;
-  (void)upb_Message_GetUnknown(msg, &len);
-  return len == 0;
+  return !upb_Message_HasUnknown(msg);
 }
 
 static bool PyUpb_Message_IsEqual(PyUpb_Message* m1, PyObject* _m2) {
@@ -2025,7 +2027,7 @@ static int PyUpb_MessageMeta_Traverse(PyObject* self, visitproc visit,
   return cpython_bits.type_traverse(self, visit, arg);
 }
 
-static int PyUpb_MessageMeta_Clear(PyObject* self, visitproc visit, void* arg) {
+static int PyUpb_MessageMeta_Clear(PyObject* self) {
   PyUpb_MessageMeta* meta = PyUpb_GetMessageMeta(self);
   Py_CLEAR(meta->py_message_descriptor);
   return cpython_bits.type_clear(self);

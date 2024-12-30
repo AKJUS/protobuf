@@ -11,6 +11,11 @@
 
 #include "google/protobuf/unknown_field_set.h"
 
+#include <cstdint>
+#include <cstring>
+#include <string>
+#include <utility>
+
 #include "absl/log/absl_check.h"
 #include "absl/strings/cord.h"
 #include "absl/strings/internal/resize_uninitialized.h"
@@ -19,11 +24,10 @@
 #include "google/protobuf/generated_message_tctable_impl.h"
 #include "google/protobuf/io/coded_stream.h"
 #include "google/protobuf/io/zero_copy_stream.h"
-#include "google/protobuf/io/zero_copy_stream_impl.h"
 #include "google/protobuf/io/zero_copy_stream_impl_lite.h"
+#include "google/protobuf/message_lite.h"
 #include "google/protobuf/parse_context.h"
 #include "google/protobuf/wire_format.h"
-#include "google/protobuf/wire_format_lite.h"
 
 // Must be included last.
 #include "google/protobuf/port_def.inc"
@@ -83,7 +87,7 @@ size_t UnknownFieldSet::SpaceUsedExcludingSelfLong() const {
                           *field.data_.string_value);
         break;
       case UnknownField::TYPE_GROUP:
-        total_size += field.data_.group_->SpaceUsedLong();
+        total_size += field.data_.group->SpaceUsedLong();
         break;
       default:
         break;
@@ -100,22 +104,36 @@ void UnknownFieldSet::AddVarint(int number, uint64_t value) {
   auto& field = *fields_.Add();
   field.number_ = number;
   field.SetType(UnknownField::TYPE_VARINT);
-  field.data_.varint_ = value;
+  field.data_.varint = value;
 }
 
 void UnknownFieldSet::AddFixed32(int number, uint32_t value) {
   auto& field = *fields_.Add();
   field.number_ = number;
   field.SetType(UnknownField::TYPE_FIXED32);
-  field.data_.fixed32_ = value;
+  field.data_.fixed32 = value;
 }
 
 void UnknownFieldSet::AddFixed64(int number, uint64_t value) {
   auto& field = *fields_.Add();
   field.number_ = number;
   field.SetType(UnknownField::TYPE_FIXED64);
-  field.data_.fixed64_ = value;
+  field.data_.fixed64 = value;
 }
+
+void UnknownFieldSet::AddLengthDelimited(int number, const absl::Cord& value) {
+  absl::CopyCordToString(value, AddLengthDelimited(number));
+}
+
+template <int&...>
+void UnknownFieldSet::AddLengthDelimited(int number, std::string&& value) {
+  auto& field = *fields_.Add();
+  field.number_ = number;
+  field.SetType(UnknownField::TYPE_LENGTH_DELIMITED);
+  field.data_.string_value =
+      Arena::Create<std::string>(arena(), std::move(value));
+}
+template void UnknownFieldSet::AddLengthDelimited(int, std::string&&);
 
 std::string* UnknownFieldSet::AddLengthDelimited(int number) {
   auto& field = *fields_.Add();
@@ -129,8 +147,8 @@ UnknownFieldSet* UnknownFieldSet::AddGroup(int number) {
   auto& field = *fields_.Add();
   field.number_ = number;
   field.SetType(UnknownField::TYPE_GROUP);
-  field.data_.group_ = Arena::Create<UnknownFieldSet>(arena());
-  return field.data_.group_;
+  field.data_.group = Arena::Create<UnknownFieldSet>(arena());
+  return field.data_.group;
 }
 
 void UnknownFieldSet::AddField(const UnknownField& field) {
@@ -148,8 +166,8 @@ void UnknownFieldSet::DeleteSubrange(int start, int num) {
 }
 
 void UnknownFieldSet::DeleteByNumber(int number) {
-  size_t left = 0;  // The number of fields left after deletion.
-  for (size_t i = 0; i < fields_.size(); ++i) {
+  int left = 0;  // The number of fields left after deletion.
+  for (int i = 0; i < fields_.size(); ++i) {
     UnknownField* field = &(fields_)[i];
     if (field->number() == number) {
       if (arena() == nullptr) {
@@ -225,7 +243,7 @@ void UnknownField::Delete() {
       delete data_.string_value;
       break;
     case UnknownField::TYPE_GROUP:
-      delete data_.group_;
+      delete data_.group;
       break;
     default:
       break;
@@ -241,8 +259,8 @@ UnknownField UnknownField::DeepCopy(Arena* arena) const {
       break;
     case UnknownField::TYPE_GROUP: {
       UnknownFieldSet* group = Arena::Create<UnknownFieldSet>(arena);
-      group->MergeFrom(*data_.group_);
-      copy.data_.group_ = group;
+      group->MergeFrom(*data_.group);
+      copy.data_.group = group;
       break;
     }
     default:

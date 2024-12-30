@@ -13,16 +13,19 @@ import unittest
 
 from google.protobuf import proto
 from google.protobuf.internal import encoder
+from google.protobuf.internal import test_proto2_pb2
 from google.protobuf.internal import test_util
 from google.protobuf.internal import testing_refleaks
 
-from google.protobuf.internal import _parameterized
+from absl.testing import parameterized
 from google.protobuf import unittest_pb2
 from google.protobuf import unittest_proto3_arena_pb2
 
 
-@_parameterized.named_parameters(('_proto2', unittest_pb2),
-                                ('_proto3', unittest_proto3_arena_pb2))
+@parameterized.named_parameters(
+    ('_proto2', unittest_pb2),
+    ('_proto3', unittest_proto3_arena_pb2),
+)
 @testing_refleaks.TestCase
 class ProtoTest(unittest.TestCase):
 
@@ -75,11 +78,27 @@ class ProtoTest(unittest.TestCase):
     )
 
 
+class SelfFieldTest(unittest.TestCase):
+
+  def test_pytype_allows_unset_self_field(self):
+    self.assertEqual(
+        test_proto2_pb2.MessageWithSelfField(something=123).something, 123
+    )
+
+  def test_pytype_allows_unset_self_and_self_underscore_field(self):
+    self.assertEqual(
+        test_proto2_pb2.MessageWithSelfAndSelfUnderscoreField(
+            something=123
+        ).something,
+        123,
+    )
+
+
 _EXPECTED_PROTO3 = b'\x04r\x02hi\x06\x08\x01r\x02hi\x06\x08\x02r\x02hi'
 _EXPECTED_PROTO2 = b'\x06\x08\x00r\x02hi\x06\x08\x01r\x02hi\x06\x08\x02r\x02hi'
 
 
-@_parameterized.named_parameters(
+@parameterized.named_parameters(
     ('_proto2', unittest_pb2, _EXPECTED_PROTO2),
     ('_proto3', unittest_proto3_arena_pb2, _EXPECTED_PROTO3),
 )

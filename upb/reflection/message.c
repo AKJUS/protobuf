@@ -138,7 +138,7 @@ bool upb_Message_Next(const upb_Message* msg, const upb_MessageDef* m,
   const upb_MiniTable* mt = upb_MessageDef_MiniTable(m);
   size_t i = *iter;
   size_t n = upb_MiniTable_FieldCount(mt);
-  const upb_MessageValue zero = {0};
+  upb_MessageValue zero = upb_MessageValue_Zero();
   UPB_UNUSED(ext_pool);
 
   // Iterate over normal fields, returning the first one that is set.
@@ -172,15 +172,18 @@ bool upb_Message_Next(const upb_Message* msg, const upb_MessageDef* m,
   }
 
   if (ext_pool) {
-    // Return any extensions that are set.
-    size_t count;
-    const upb_Extension* ext = UPB_PRIVATE(_upb_Message_Getexts)(msg, &count);
-    if (i - n < count) {
-      ext += count - 1 - (i - n);
-      memcpy(out_val, &ext->data, sizeof(*out_val));
-      *out_f = upb_DefPool_FindExtensionByMiniTable(ext_pool, ext->ext);
-      *iter = i;
-      return true;
+    upb_Message_Internal* in = UPB_PRIVATE(_upb_Message_GetInternal)(msg);
+    if (!in) return false;
+
+    for (; (i - n) < in->size; i++) {
+      upb_TaggedAuxPtr tagged_ptr = in->aux_data[i - n];
+      if (upb_TaggedAuxPtr_IsExtension(tagged_ptr)) {
+        const upb_Extension* ext = upb_TaggedAuxPtr_Extension(tagged_ptr);
+        memcpy(out_val, &ext->data, sizeof(*out_val));
+        *out_f = upb_DefPool_FindExtensionByMiniTable(ext_pool, ext->ext);
+        *iter = i;
+        return true;
+      }
     }
   }
 

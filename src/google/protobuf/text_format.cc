@@ -1094,7 +1094,7 @@ class TextFormat::Parser::ParserImpl {
       return true;
     }
 
-    // If allow_field_numer_ or allow_unknown_field_ is true, we should able
+    // If allow_field_number_ or allow_unknown_field_ is true, we should able
     // to parse integer identifiers.
     if ((allow_field_number_ || allow_unknown_field_ ||
          allow_unknown_extension_) &&
@@ -2566,7 +2566,8 @@ void MapFieldPrinterHelper::CopyKey(const MapKey& key, Message* message,
       ABSL_LOG(ERROR) << "Not supported.";
       break;
     case FieldDescriptor::CPPTYPE_STRING:
-      reflection->SetString(message, field_desc, key.GetStringValue());
+      reflection->SetString(message, field_desc,
+                            std::string(key.GetStringValue()));
       return;
     case FieldDescriptor::CPPTYPE_INT64:
       reflection->SetInt64(message, field_desc, key.GetInt64Value());
@@ -2607,7 +2608,8 @@ void MapFieldPrinterHelper::CopyValue(const MapValueRef& value,
       return;
     }
     case FieldDescriptor::CPPTYPE_STRING:
-      reflection->SetString(message, field_desc, value.GetStringValue());
+      reflection->SetString(message, field_desc,
+                            std::string(value.GetStringValue()));
       return;
     case FieldDescriptor::CPPTYPE_INT64:
       reflection->SetInt64(message, field_desc, value.GetInt64Value());
@@ -3019,20 +3021,13 @@ void TextFormat::Printer::PrintUnknownFields(
   }
 }
 
-namespace internal {
-
-// Check if the field is sensitive and should be redacted.
-bool ShouldRedactField(const FieldDescriptor* field) {
-  if (field->options().debug_redact()) return true;
-  return false;
-}
-
-}  // namespace internal
-
 bool TextFormat::Printer::TryRedactFieldValue(
     const Message& message, const FieldDescriptor* field,
     BaseTextGenerator* generator, bool insert_value_separator) const {
-  if (internal::ShouldRedactField(field)) {
+  RedactionState redaction_state = field->options().debug_redact()
+                                       ? RedactionState{true, false}
+                                       : RedactionState{false, false};
+  if (redaction_state.redact) {
     if (redact_debug_string_) {
       IncrementRedactedFieldCounter();
       if (insert_value_separator) {

@@ -26,6 +26,7 @@
 #include "google/protobuf/compiler/java/generator_factory.h"
 #include "google/protobuf/compiler/java/helpers.h"
 #include "google/protobuf/compiler/java/full/generator_factory.h"
+#include "google/protobuf/compiler/java/internal_helpers.h"
 #include "google/protobuf/compiler/java/lite/generator_factory.h"
 #include "google/protobuf/compiler/java/name_resolver.h"
 #include "google/protobuf/compiler/java/options.h"
@@ -33,6 +34,7 @@
 #include "google/protobuf/compiler/retention.h"
 #include "google/protobuf/compiler/versions.h"
 #include "google/protobuf/descriptor.pb.h"
+#include "google/protobuf/descriptor_visitor.h"
 #include "google/protobuf/dynamic_message.h"
 #include "google/protobuf/io/printer.h"
 #include "google/protobuf/io/zero_copy_stream.h"
@@ -100,44 +102,34 @@ bool CollectExtensions(const Message& message, FieldDescriptorSet* extensions) {
   return true;
 }
 
-// Finds all extensions in the given message and its sub-messages.  If the
-// message contains unknown fields (which could be extensions), then those
-// extensions are defined in alternate_pool.
-// The message will be converted to a DynamicMessage backed by alternate_pool
-// in order to handle this case.
-void CollectExtensions(const FileDescriptorProto& file_proto,
-                       const DescriptorPool& alternate_pool,
-                       FieldDescriptorSet* extensions,
-                       const std::string& file_data) {
-  if (!CollectExtensions(file_proto, extensions)) {
-    // There are unknown fields in the file_proto, which are probably
-    // extensions. We need to parse the data into a dynamic message based on the
-    // builder-pool to find out all extensions.
-    const Descriptor* file_proto_desc = alternate_pool.FindMessageTypeByName(
-        file_proto.GetDescriptor()->full_name());
-    ABSL_CHECK(file_proto_desc)
-        << "Find unknown fields in FileDescriptorProto when building "
-        << file_proto.name()
-        << ". It's likely that those fields are custom options, however, "
-           "descriptor.proto is not in the transitive dependencies. "
-           "This normally should not happen. Please report a bug.";
-    DynamicMessageFactory factory;
-    std::unique_ptr<Message> dynamic_file_proto(
-        factory.GetPrototype(file_proto_desc)->New());
-    ABSL_CHECK(dynamic_file_proto.get() != nullptr);
-    ABSL_CHECK(dynamic_file_proto->ParseFromString(file_data));
+// Finds all extensions for custom options in the given file descriptor with the
+// builder pool which resolves Java features instead of the generated pool.
+void CollectExtensions(const FileDescriptor& file,
+                       FieldDescriptorSet* extensions) {
+  FileDescriptorProto file_proto = StripSourceRetentionOptions(file);
+  std::string file_data;
+  file_proto.SerializeToString(&file_data);
+  const Descriptor* file_proto_desc = file.pool()->FindMessageTypeByName(
+      file_proto.GetDescriptor()->full_name());
 
-    // Collect the extensions again from the dynamic message. There should be no
-    // more unknown fields this time, i.e. all the custom options should be
-    // parsed as extensions now.
-    extensions->clear();
-    ABSL_CHECK(CollectExtensions(*dynamic_file_proto, extensions))
-        << "Find unknown fields in FileDescriptorProto when building "
-        << file_proto.name()
-        << ". It's likely that those fields are custom options, however, "
-           "those options cannot be recognized in the builder pool. "
-           "This normally should not happen. Please report a bug.";
-  }
+  // descriptor.proto is not found in the builder pool, meaning there are no
+  // custom options.
+  if (file_proto_desc == nullptr) return;
+
+  DynamicMessageFactory factory;
+  std::unique_ptr<Message> dynamic_file_proto(
+      factory.GetPrototype(file_proto_desc)->New());
+  ABSL_CHECK(dynamic_file_proto.get() != nullptr);
+  ABSL_CHECK(dynamic_file_proto->ParseFromString(file_data));
+
+  // Collect the extensions again from the dynamic message.
+  extensions->clear();
+  ABSL_CHECK(CollectExtensions(*dynamic_file_proto, extensions))
+      << "Found unknown fields in FileDescriptorProto when building "
+      << file_proto.name()
+      << ". It's likely that those fields are custom options, however, "
+         "those options cannot be recognized in the builder pool. "
+         "This normally should not happen. Please report a bug.";
 }
 
 // Our static initialization methods can become very, very large.
@@ -238,6 +230,17 @@ bool FileGenerator::Validate(std::string* error) {
         << "name for the .proto file to be safe.";
   }
 
+  // Check that no field is a closed enum with implicit presence. For normal
+  // cases this will be rejected by protoc before the generator is invoked, but
+  // for cases like legacy_closed_enum it may reach the generator.
+  google::protobuf::internal::VisitDescriptors(*file_, [&](const FieldDescriptor& field) {
+    if (field.enum_type() != nullptr && !SupportUnknownEnumValue(&field) &&
+        !field.has_presence() && !field.is_repeated()) {
+      absl::StrAppend(error, "Field ", field.full_name(),
+                      " has a closed enum type with implicit presence.\n");
+    }
+  });
+
   // Print a warning if optimize_for = LITE_RUNTIME is used.
   if (file_->options().optimize_for() == FileOptions::LITE_RUNTIME &&
       !options_.enforce_lite) {
@@ -250,7 +253,8 @@ bool FileGenerator::Validate(std::string* error) {
            "https://github.com/protocolbuffers/protobuf/blob/main/java/"
            "lite.md";
   }
-  return true;
+
+  return error->empty();
 }
 
 void FileGenerator::Generate(io::Printer* printer) {
@@ -460,11 +464,8 @@ void FileGenerator::GenerateDescriptorInitializationCodeForImmutable(
   // To find those extensions, we need to parse the data into a dynamic message
   // of the FileDescriptor based on the builder-pool, then we can use
   // reflections to find all extension fields
-  FileDescriptorProto file_proto = StripSourceRetentionOptions(*file_);
-  std::string file_data;
-  file_proto.SerializeToString(&file_data);
   FieldDescriptorSet extensions;
-  CollectExtensions(file_proto, *file_->pool(), &extensions, file_data);
+  CollectExtensions(*file_, &extensions);
 
   if (options_.strip_nonfunctional_codegen) {
     // Skip feature extensions, which are a visible (but non-functional)
@@ -596,81 +597,6 @@ void FileGenerator::GenerateSiblings(
             options_.annotate_code, annotation_list, "", generator.get(),
             options_.opensource_runtime, &ServiceGenerator::Generate);
       }
-    }
-  }
-}
-
-std::string FileGenerator::GetKotlinClassname() {
-  return name_resolver_->GetFileClassName(file_, immutable_api_, true);
-}
-
-void FileGenerator::GenerateKotlin(io::Printer* printer) {
-  printer->Print(
-      "// Generated by the protocol buffer compiler. DO NOT EDIT!\n"
-      "// NO CHECKED-IN PROTOBUF "
-      // Intentional line breaker
-      "GENCODE\n"
-      "// source: $filename$\n"
-      "\n",
-      "filename", file_->name());
-  printer->Print(
-      "// Generated files should ignore deprecation warnings\n"
-      "@file:Suppress(\"DEPRECATION\")\n");
-  if (!java_package_.empty()) {
-    printer->Print(
-        "package $package$;\n"
-        "\n",
-        "package", EscapeKotlinKeywords(java_package_));
-  }
-}
-
-void FileGenerator::GenerateKotlinSiblings(
-    const std::string& package_dir, GeneratorContext* context,
-    std::vector<std::string>* file_list,
-    std::vector<std::string>* annotation_list) {
-  for (int i = 0; i < file_->message_type_count(); i++) {
-    const Descriptor* descriptor = file_->message_type(i);
-    MessageGenerator* generator = message_generators_[i].get();
-    auto open_file = [context](const std::string& filename) {
-      return std::unique_ptr<io::ZeroCopyOutputStream>(context->Open(filename));
-    };
-    std::string filename =
-        absl::StrCat(package_dir, descriptor->name(), "Kt.kt");
-    file_list->push_back(filename);
-    std::string info_full_path = absl::StrCat(filename, ".pb.meta");
-    GeneratedCodeInfo annotations;
-    io::AnnotationProtoCollector<GeneratedCodeInfo> annotation_collector(
-        &annotations);
-    auto output = open_file(filename);
-    io::Printer printer(
-        output.get(), '$',
-        options_.annotate_code ? &annotation_collector : nullptr);
-
-    printer.Print(
-        "// Generated by the protocol buffer compiler. DO NOT EDIT!\n"
-        "// NO CHECKED-IN PROTOBUF "
-        // Intentional line breaker
-        "GENCODE\n"
-        "// source: $filename$\n"
-        "\n",
-        "filename", descriptor->file()->name());
-    printer.Print(
-        "// Generated files should ignore deprecation warnings\n"
-        "@file:Suppress(\"DEPRECATION\")\n");
-    if (!java_package_.empty()) {
-      printer.Print(
-          "package $package$;\n"
-          "\n",
-          "package", EscapeKotlinKeywords(java_package_));
-    }
-
-    generator->GenerateKotlinMembers(&printer);
-    generator->GenerateTopLevelKotlinMembers(&printer);
-
-    if (options_.annotate_code) {
-      auto info_output = open_file(info_full_path);
-      annotations.SerializeToZeroCopyStream(info_output.get());
-      annotation_list->push_back(info_full_path);
     }
   }
 }

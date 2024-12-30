@@ -9,17 +9,16 @@
 #define GOOGLE_PROTOBUF_HPB_BACKEND_UPB_UPB_H__
 
 #include "google/protobuf/hpb/backend/upb/interop.h"
-#include "google/protobuf/hpb/internal/internal.h"
 #include "google/protobuf/hpb/internal/template_help.h"
 #include "google/protobuf/hpb/ptr.h"
 
 namespace hpb::internal::backend::upb {
 
 template <typename T>
-void ClearMessage(hpb::internal::PtrOrRaw<T> message) {
+void ClearMessage(hpb::internal::PtrOrRawMutable<T> message) {
   auto ptr = Ptr(message);
   auto minitable = hpb::interop::upb::GetMiniTable(ptr);
-  upb_Message_Clear(hpb::internal::GetInternalMsg(ptr), minitable);
+  upb_Message_Clear(hpb::interop::upb::GetMessage(ptr), minitable);
 }
 
 }  // namespace hpb::internal::backend::upb

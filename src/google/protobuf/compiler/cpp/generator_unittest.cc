@@ -255,11 +255,32 @@ TEST_F(CppGeneratorTest, StringTypeCordNotForExtension) {
       "--experimental_editions foo.proto");
 
   ExpectErrorSubstring(
-      "Extension bar specifies string_type=CORD which is not supported for "
-      "extensions.");
+      "Extension bar specifies CORD string type which is not supported for "
+      "extensions");
 }
 
-TEST_F(CppGeneratorTest, CtypeOnNoneStringFieldTest) {
+TEST_F(CppGeneratorTest, InheritedStringTypeCordNotForExtension) {
+  CreateTempFile("foo.proto", R"schema(
+    edition = "2024";
+    import "google/protobuf/cpp_features.proto";
+    option features.(pb.cpp).string_type = CORD;
+
+    message Foo {
+      extensions 1 to max;
+    }
+    extend Foo {
+      bytes bar = 1;
+    }
+  )schema");
+
+  RunProtoc(
+      "protocol_compiler --proto_path=$tmpdir --cpp_out=$tmpdir "
+      "--experimental_editions foo.proto");
+
+  ExpectNoErrors();
+}
+
+TEST_F(CppGeneratorTest, CtypeOnNonStringFieldTest) {
   CreateTempFile("foo.proto",
                  R"schema(
     edition = "2023";
@@ -269,8 +290,8 @@ TEST_F(CppGeneratorTest, CtypeOnNoneStringFieldTest) {
   RunProtoc(
       "protocol_compiler --proto_path=$tmpdir --cpp_out=$tmpdir foo.proto");
   ExpectErrorSubstring(
-      "Field Foo.bar specifies ctype, but is not "
-      "a string nor bytes field.");
+      "Field Foo.bar specifies string_type, but is not a string nor bytes "
+      "field.");
 }
 
 TEST_F(CppGeneratorTest, CtypeOnExtensionTest) {
@@ -286,8 +307,8 @@ TEST_F(CppGeneratorTest, CtypeOnExtensionTest) {
   RunProtoc(
       "protocol_compiler --proto_path=$tmpdir --cpp_out=$tmpdir foo.proto");
   ExpectErrorSubstring(
-      "Extension bar specifies ctype=CORD which is "
-      "not supported for extensions.");
+      "Extension bar specifies CORD string type which is not supported for "
+      "extensions");
 }
 }  // namespace
 }  // namespace cpp

@@ -11,7 +11,7 @@
 #include <string>
 
 #include "google/protobuf/descriptor.pb.h"
-#include "google/protobuf/compiler/hpb/output.h"
+#include "google/protobuf/compiler/hpb/context.h"
 
 namespace google::protobuf::hpb_generator {
 
@@ -28,15 +28,15 @@ std::string ForwardingHeaderFilename(const google::protobuf::FileDescriptor* fil
 std::string UpbCFilename(const google::protobuf::FileDescriptor* file);
 std::string CppHeaderFilename(const google::protobuf::FileDescriptor* file);
 
-void WriteStartNamespace(const protobuf::FileDescriptor* file, Output& output);
-void WriteEndNamespace(const protobuf::FileDescriptor* file, Output& output);
+void WriteStartNamespace(const protobuf::FileDescriptor* file, Context& ctx);
+void WriteEndNamespace(const protobuf::FileDescriptor* file, Context& ctx);
 
 std::string CppConstType(const protobuf::FieldDescriptor* field);
 std::string CppTypeParameterName(const protobuf::FieldDescriptor* field);
 
 std::string MessageBaseType(const protobuf::FieldDescriptor* field,
                             bool is_const);
-// Generate protos::Ptr<const Model> to be used in accessors as public
+// Generate hpb::Ptr<const Model> to be used in accessors as public
 // signatures.
 std::string MessagePtrConstType(const protobuf::FieldDescriptor* field,
                                 bool is_const);

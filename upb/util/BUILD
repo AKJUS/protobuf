@@ -1,12 +1,11 @@
+load("//bazel:proto_library.bzl", "proto_library")
 load(
     "//bazel:upb_proto_library.bzl",
     "upb_c_proto_library",
     "upb_proto_reflection_library",
 )
 
-# begin:google_only
-# package(default_applicable_licenses = ["//upb:license"])
-# end:google_only
+package(default_applicable_licenses = ["//:license"])
 
 licenses(["notice"])
 
@@ -85,19 +84,6 @@ cc_test(
     ],
 )
 
-# begin:google_only
-# cc_test(
-#     name = "def_to_proto_fuzz_test",
-#     srcs = ["def_to_proto_fuzz_test.cc"],
-#     tags = ["clang_only"],
-#     deps = [
-#         ":def_to_proto_test_lib",
-#         "@com_google_googletest//:gtest", "@com_google_googletest//:gtest_main",
-#         "//testing/fuzzing:fuzztest",
-#     ],
-# )
-# end:google_only
-
 # Required fields
 
 cc_library(
@@ -165,7 +151,6 @@ cc_test(
     ],
 )
 
-# begin:github_only
 filegroup(
     name = "source_files",
     srcs = [
@@ -176,9 +161,7 @@ filegroup(
     ],
     visibility = ["//python/dist:__pkg__"],
 )
-# end:github_only
 
-# begin:github_only
 filegroup(
     name = "test_srcs",
     srcs = glob(
@@ -209,4 +192,3 @@ filegroup(
     ),
     visibility = ["//upb:__pkg__"],
 )
-# end:github_only

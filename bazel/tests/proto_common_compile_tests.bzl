@@ -1,3 +1,10 @@
+# Protocol Buffers - Google's data interchange format
+# Copyright 2024 Google Inc.  All rights reserved.
+#
+# Use of this source code is governed by a BSD-style
+# license that can be found in the LICENSE file or at
+# https://developers.google.com/open-source/licenses/bsd
+#
 """Tests for `proto_common.compile` function."""
 
 load("@rules_testing//lib:analysis_test.bzl", "analysis_test", "test_suite")
@@ -51,7 +58,7 @@ def _test_compile_basic_impl(env, target):
     action.argv().contains_exactly_predicates(
         [
             matching.str_endswith(protocol_compiler),
-            matching.str_matches("--plugin=b*-out/*-exec-*/bin/*/testdata/plugin"),
+            matching.str_matches("--plugin=b*-out/*-exec*/bin/*/testdata/plugin"),
             matching.equals_wrapper("-I."),
             matching.str_endswith("/A.proto"),
         ],
@@ -104,7 +111,7 @@ def _test_compile_with_plugin_output_impl(env, target):
         [
             matching.str_endswith(protocol_compiler),
             matching.str_matches("--java_out=param1,param2:b*-out/*/test_compile_with_plugin_output_compile"),
-            matching.str_matches("--plugin=b*-out/*-exec-*/bin/*/testdata/plugin"),
+            matching.str_matches("--plugin=b*-out/*-exec*/bin/*/testdata/plugin"),
             matching.equals_wrapper("-I."),
             matching.str_endswith("/A.proto"),
         ],
@@ -131,7 +138,7 @@ def _test_compile_with_directory_plugin_output_impl(env, target):
         [
             matching.str_endswith(protocol_compiler),
             matching.str_matches("--java_out=param1,param2:b*-out/*/bin"),
-            matching.str_matches("--plugin=b*-out/*-exec-*/bin/*/testdata/plugin"),
+            matching.str_matches("--plugin=b*-out/*-exec*/bin/*/testdata/plugin"),
             matching.equals_wrapper("-I."),
             matching.str_endswith("/A.proto"),
         ],
@@ -159,7 +166,7 @@ def _test_compile_additional_args_impl(env, target):
             matching.str_endswith(protocol_compiler),
             matching.equals_wrapper("--a"),
             matching.equals_wrapper("--b"),
-            matching.str_matches("--plugin=b*-out/*-exec-*/bin/*/testdata/plugin"),
+            matching.str_matches("--plugin=b*-out/*-exec*/bin/*/testdata/plugin"),
             matching.equals_wrapper("-I."),
             matching.str_endswith("/A.proto"),
         ],
@@ -287,7 +294,7 @@ def _test_compile_protoc_opts_impl(env, target):
             matching.str_endswith(protocol_compiler),
             matching.equals_wrapper("--foo"),
             matching.equals_wrapper("--bar"),
-            matching.str_matches("--plugin=b*-out/*-exec-*/bin/*/testdata/plugin"),
+            matching.str_matches("--plugin=b*-out/*-exec*/bin/*/testdata/plugin"),
             matching.equals_wrapper("-I."),
             matching.str_endswith("/A.proto"),
         ],
@@ -318,7 +325,7 @@ def _test_compile_direct_generated_protos_impl(env, target):
     action.argv().contains_exactly_predicates(
         [
             matching.str_endswith(protocol_compiler),
-            matching.str_matches("--plugin=b*-out/*-exec-*/bin/*/testdata/plugin"),
+            matching.str_matches("--plugin=b*-out/*-exec*/bin/*/testdata/plugin"),
             matching.str_matches("-Ib*-out/*/*"),
             matching.equals_wrapper("-I."),
             matching.str_endswith("/A.proto"),
@@ -353,7 +360,7 @@ def _test_compile_indirect_generated_protos_impl(env, target):
     action.argv().contains_exactly_predicates(
         [
             matching.str_endswith(protocol_compiler),
-            matching.str_matches("--plugin=b*-out/*-exec-*/bin/*/testdata/plugin"),
+            matching.str_matches("--plugin=b*-out/*-exec*/bin/*/testdata/plugin"),
             matching.str_matches("-Ib*-out/*/*"),
             matching.equals_wrapper("-I."),
             matching.str_endswith("/A.proto"),

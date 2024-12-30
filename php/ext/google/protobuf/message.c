@@ -312,7 +312,13 @@ static zval* Message_read_property(zend_object* obj, zend_string* member,
   const upb_FieldDef* f = get_field(intern, member);
 
   if (!f) return &EG(uninitialized_zval);
-  Message_get(intern, f, rv);
+
+  if (upb_FieldDef_IsOptional(f) && upb_FieldDef_HasPresence(f) &&
+      Message_has_property(obj, member, 0, cache_slot) == false) {
+    ZVAL_NULL(rv);
+  } else {
+    Message_get(intern, f, rv);
+  }
   return rv;
 }
 
@@ -722,12 +728,17 @@ PHP_METHOD(Message, mergeFromJsonString) {
   }
 
   upb_Status_Clear(&status);
-  if (!upb_JsonDecode(data, data_len, intern->msg, intern->desc->msgdef,
-                      DescriptorPool_GetSymbolTable(), options, arena,
-                      &status)) {
-    zend_throw_exception_ex(NULL, 0, "Error occurred during parsing: %s",
-                            upb_Status_ErrorMessage(&status));
-    return;
+  int result = upb_JsonDecodeDetectingNonconformance(
+      data, data_len, intern->msg, intern->desc->msgdef,
+      DescriptorPool_GetSymbolTable(), options, arena, &status);
+
+  switch (result) {
+    case kUpb_JsonDecodeResult_Ok:
+      break;
+    case kUpb_JsonDecodeResult_Error:
+      zend_throw_exception_ex(NULL, 0, "Error occurred during parsing: %s",
+                              upb_Status_ErrorMessage(&status));
+      return;
   }
 }
 

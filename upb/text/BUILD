@@ -7,6 +7,8 @@
 
 load("//upb/bazel:build_defs.bzl", "UPB_DEFAULT_COPTS")
 
+package(default_applicable_licenses = ["//:license"])
+
 cc_library(
     name = "text",
     srcs = [
@@ -45,7 +47,6 @@ cc_library(
     deps = [
         ":internal",
         "//upb:base",
-        "//upb:eps_copy_input_stream",
         "//upb:message",
         "//upb:mini_table",
         "//upb:port",
@@ -103,7 +104,6 @@ cc_test(
     ],
 )
 
-# begin:github_only
 filegroup(
     name = "source_files",
     srcs = glob(
@@ -117,4 +117,3 @@ filegroup(
         "//upb/cmake:__pkg__",
     ],
 )
-# end:github_only
